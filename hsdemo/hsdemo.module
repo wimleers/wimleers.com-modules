@@ -190,8 +190,12 @@ function hsdemo_page_explanation() {
   $output .= '<p style="font-size: 90%"><em>
               For bug reports and feature or support requests, please use the
               <a href="http://drupal.org/project/issues/hierarchical_select">issue queue</a>,
-              not my contact form. Thanks.
+              not my contact form. Thanks.<br />
               </em></p>';
+
+  $output .= '<p style="font-size: 90%">P.S.: The module that powers this demo
+              is available on <a href="https://github.com/wimleers/wimleers.com-modules/tree/master/hsdemo">Github</a>.
+              </p>';
 
   return $output;
 }
