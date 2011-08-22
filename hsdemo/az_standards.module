@@ -1,0 +1,323 @@
+<?php
+
+/**
+ * Implementation of hook_hierarchical_select_implementation_info().
+ */
+function az_standards_hierarchical_select_implementation_info() {
+  return array(
+    'hierarchy type' => t('Arizona standards'),
+    'entity type'    => t('Node'),
+  );
+}
+
+
+function az_standards_hs_defaults() {
+  return array(
+    'module' => 'az_standards',
+    'save_lineage' => 0,
+    'editability' => array(
+      'max_levels' => 4,
+    ),
+    'level_labels' => array(
+      'status' => 1,
+      'labels' => array(
+        0 => t('Grade'),
+        1 => t('Subject'),
+        2 => t('Strand'),
+        3 => t('Concept'),
+        4 => t('Objective'),
+      ),
+    ),
+    'dropbox' => array(
+      'status' => 1,
+      'title' => t('Selected standards'),
+      'limit' => 0,
+      'reset_hs' => 0,
+    ),
+    'params' => array(),
+  );
+}
+
+function az_standards_hs_string() {
+  return array(
+    'hierarchy'   => t('tree'),
+    'hierarchies' => t('trees'),
+    'item'        => t('standard'),
+    'items'       => t('standards'),
+    'item_type'   => t('standard type'),
+  );
+}
+
+function az_standards_key_details($key, $format = 'short') {
+  $out = '';
+  $keys = az_standards_keymap($format);
+  $keys_long = az_standards_keymap('long');
+  
+  if (strstr($key, '-label')) {
+    $key = substr($key, 0, -6);
+  }
+  if (strstr($key, '**')) {
+    $standard = explode('**', $key);
+  }
+  else {
+    $standard = array($key);
+  }
+  $count = count($standard);
+  
+  if ($standard[0]) {
+    if (is_numeric($standard[0])) {
+      $out .= $keys[0] .' ';
+    }
+    $out .= ucwords($standard[0]);
+    if ($count > 1) {
+      $out .= ', ';
+    }
+  }
+  if ($standard[1]) {
+    $out .= ucwords($standard[1]);
+    if ($count > 2) {
+      $out .= ', ';
+    }
+  }
+  if ($standard[2]) {
+    $out .= $keys[2] . $standard[2];
+  }
+  if ($standard[3]) {
+    $out .= $keys[3] . $standard[3];
+  }
+  if ($standard[4]) {
+    $out .= $keys[4] . $standard[4];
+  }
+
+  return array('text' => $out, 'key' => strtolower($keys_long[$count - 1]));
+}
+
+function az_standards_keymap($format = 'short') {
+  switch ($format) {
+    case 'short':
+      return array(
+        0 => t('Grade'),
+        1 => t(''),
+        2 => t('S'),
+        3 => t('C'),
+        4 => t('PO'),
+      );
+    
+    case 'long':
+      return array(
+        0 => t('Grade'),
+        1 => t('Subject'),
+        2 => t('Strand'),
+        3 => t('Concept'),
+        4 => t('Performance Objective'),
+      );
+  }
+}
+
+/**
+ * Implementation of hook_hierarchical_select_params().
+ */
+function az_standards_hierarchical_select_params() {
+  $params = array(
+    'type',
+  );
+  return $params;
+}
+
+
+/**
+ * Implementation of hook_hierarchical_select_children().
+ */
+function az_standards_hierarchical_select_children($parent, $params) {
+  if ($parent != -1 && !stristr($parent, 'label_')) {
+    $args = explode('**', $parent);
+    if (!count($args)) {
+      $args = array($parent);
+    }
+    if (count($args)) {
+      return call_user_func_array('az_standards_service_query', $args);
+    }
+  }
+}
+
+
+/**
+ * Implementation of hook_hierarchical_select_lineage().
+ */
+function az_standards_hierarchical_select_lineage($item, $params) {
+  if ($item != -1 && !stristr($item, 'label_')) {
+    if (strstr($item, '**')) {
+      $lineage = array();
+
+      $parts = explode('**', $item);
+      for ($i = 0; $i < count($parts); $i++) {
+        $lineage[$i] = ($i == 0) ? $parts[$i] : $lineage[$i - 1] .'**'. $parts[$i];
+      }
+
+      return $lineage;
+    }
+    else {
+      return array($item);
+    }
+  }
+  return array();
+}
+
+
+/**
+ * Implementation of hook_hierarchical_select_valid_item().
+ */
+function az_standards_hierarchical_select_valid_item($item, $params) {
+  if ($item != -1 && !stristr($item, 'label_')) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+/**
+ * Implementation of hook_hierarchical_select_root_level().
+ */
+function az_standards_hierarchical_select_root_level($params) {
+  return az_standards_service_query();
+}
+
+
+/**
+ * Implementation of hook_hierarchical_select_item_get_label().
+ */
+function az_standards_hierarchical_select_item_get_label($item, $params) {
+  static $labels = array();
+  $config = hierarchical_select_common_config_get('az_standards-'. $params['type']);
+  $level_labels = $config['level_labels']['status'] ? $config['level_labels']['labels'] : array();
+  
+  if (!isset($labels[$item])) {
+    $tmp = '';
+    if (strstr($item, '**')) {
+      $parts = explode('**', $item);
+      $index = count($parts) - 1;
+      $item = $parts[$index];
+    }
+    else {
+      $index = 0;
+    }
+    if (count($level_labels)) {
+      $tmp .= t($level_labels[$index]) .': ';
+    }
+    $labels[$item] = $tmp . t($item);
+  }
+
+  return $labels[$item];
+}
+
+
+/**
+ * Utility for querying the AZ Standards Service in IDEAL Sakai
+ * Not for use in any other methods - it should be called via a menu item (see
+ * menu item for _webservices/az_standards_service_query)
+ */
+function az_standards_service_query($grade = NULL, $subject = NULL, $strand = NULL, $concept = NULL, $po = NULL) {
+  
+  static $cache;
+  $args = func_get_args();
+  $cache_key = implode('**', $args);
+  if (isset($cache[$cache_key])) {
+    return $cache[$cache_key];
+  }
+  else {
+    $cached = cache_get($cache_key, 'cache_az_standards');
+    if ($cached) {
+      $cache[$cache_key] = unserialize($cached->data);
+      return $cache[$cache_key];
+    }
+  }
+
+  $url = variable_get('az_standards_service_url', 'https://sapp.ideal.azed.gov/sakai-questionbank-author/service/standards/standardData.xml');
+  $url .= '?';
+
+  $params = array(
+    'grade' => $grade,
+    'subject' => $subject,
+    'strand' => $strand,
+    'concept' => $concept,
+    'po' => $po,
+  );
+  $field = 'grade';
+  
+  foreach ($params as $key => $value) {
+    if ($value || is_numeric($value)) {
+      $url .= $key .'='. urlencode($value) .'&';
+    }
+  }
+  
+  if ($params['po']) {
+    $field = '';
+  }
+  else if ($params['concept']) {
+    $field = 'po';
+  }
+  else if ($params['strand']) {
+    $field = 'concept';
+  }
+  else if ($params['subject']) {
+    $field = 'strand';
+  }
+  else if ($params['grade'] || is_numeric($params['grade'])) {
+    $field = 'subject';
+  }
+  
+  $url .= 'field='. $field;
+
+  /**
+   * Example query url:
+   * https://sapp.ideal.azed.gov/sakai-questionbank-author/service/standards/standardData.xml?
+   * grade=10&subject=mathematics&strand=2&field=concept
+   */
+  $result = drupal_http_request($url);
+  $options = az_standards_service_reformat_result($result->data, $field, $params);
+  $cache[$cache_key] = $options;
+  cache_set($cache_key, serialize($options), 'cache_az_standards');
+  return $options;
+}
+
+
+/**
+ * Reformats the resulting XML string from the standards query service into
+ * an array of options.
+ * @param $result The result XML from az_standards_service_query
+ * @return String of HTML or <error>
+ */
+function az_standards_service_reformat_result($result, $field_selected, $params) {
+  if (strlen($result) > 0) {
+    $xml = new DOMDocument();
+    $xml->loadXML($result);
+    $xml->saveXML();
+    $options_xml = $xml->getElementsByTagName('option');
+    $options = array();
+    
+    foreach ($params as $key => $value) {
+      if (!$value && !is_numeric($value)) {
+        unset($params[$key]);
+      }
+    }
+    
+    foreach ($options_xml as $option) {
+      $value = htmlspecialchars($option->getAttribute('value'), ENT_QUOTES);
+      $label = htmlspecialchars($option->getAttribute('label'), ENT_QUOTES);
+      $tmp_params = $params;
+      $tmp_params[] = $value;
+      $key = implode('**', $tmp_params);
+      $options[$key] = ucwords($value);
+      // Cache the label for this item
+      $cache_key = $key .'-label';
+      $cached = cache_get($cache_key, 'cache_az_standards');
+      if (!$cached) {
+        cache_set($cache_key, $label, 'cache_az_standards');
+      }
+    }
+    
+    asort($options);
+    return $options;
+  }
+  return FALSE;
+}

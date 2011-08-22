@@ -1,0 +1,5 @@
+<?php
+function az_standards_schema() {
+  $schema['cache_az_standards'] = drupal_get_schema_unprocessed('system', 'cache');
+  return $schema;
+}

@@ -1,0 +1,795 @@
+<?php
+
+define('HSDEMO_TAXONOMY_EXAMPLE_1_VID', 2);
+define('HSDEMO_TAXONOMY_EXAMPLE_1_DEFAULT', 6);
+define('HSDEMO_TAXONOMY_EXAMPLE_2_VID', 2);
+define('HSDEMO_TAXONOMY_EXAMPLE_2_DEFAULT', serialize(array(6, 21)));
+define('HSDEMO_TAXONOMY_EXAMPLE_3_VID', 6);
+define('HSDEMO_TAXONOMY_EXAMPLE_3_DEFAULT', serialize(array(43,45,51))); // Belgium, Spain, Barcelona
+define('HSDEMO_TAXONOMY_EXAMPLE_3_ORIGINAL', serialize(array(43,48,46,47,44,50,49,45,51,53,52)));
+
+
+//----------------------------------------------------------------------------
+// Drupal core hooks.
+
+/**
+ * Implementation of hook_menu().
+ */
+function hsdemo_menu() {
+  $items = array();
+
+  $items['demo/hierarchical-select'] = array(
+    'title'         => t('Hierarchical Select'),
+    'page callback' => 'hsdemo_page_explanation',
+    'access arguments'  => array('access content'),
+    'type'          => MENU_NORMAL_ITEM,
+  );
+  $items['demo/hierarchical-select/explanation'] = array(
+    'title'  => t('Explanation'),
+    'weight' => -10,
+    'access arguments'  => array('access content'),
+    'type'   => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['demo/hierarchical-select/taxonomy'] = array(
+    'title'          => t('Taxonomy'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('hsdemo_page_taxonomy'),
+    'type'           => MENU_LOCAL_TASK,
+    'access arguments'  => array('access content'),
+    'weight'         => 1,
+  );
+  $items['demo/hierarchical-select/menu'] = array(
+    'title'          => t('Menu'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('hsdemo_page_menu'),
+    'type'           => MENU_LOCAL_TASK,
+    'access arguments'  => array('access content'),
+    'weight'         => 3,
+  );
+  $items['demo/hierarchical-select/flatlist'] = array(
+    'title'          => t('Flat List'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('hsdemo_page_flatlist'),
+    'type'           => MENU_LOCAL_TASK,
+    'access arguments'  => array('access content'),
+    'weight'         => 5,
+  );
+  $items['demo/hierarchical-select/az-standards'] = array(
+    'title'          => t('Arizona Standards'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('hsdemo_page_azstandards'),
+    'type'           => MENU_LOCAL_TASK,
+    'access arguments'  => array('access content'),
+    'weight'         => 7,
+  );
+  $items['demo/hierarchical-select/config-ui'] = array(
+    'title'          => t('Config UI'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('hsdemo_page_configui'),
+    'type'           => MENU_LOCAL_TASK,
+    'access arguments'  => array('access content'),
+    'weight'         => 9,
+  );
+  $items['demo/hierarchical-select/live'] = array(
+    'title'            => t('Live sites'),
+    'page callback'    => 'hsdemo_page_live',
+    'type'             => MENU_LOCAL_TASK,
+    'access arguments' => array('access content'),
+    'weight'           => 11,
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_cron().
+ */
+function hsdemo_cron() {
+  $last_cleanup = variable_get('hsdemo_last_cleanup', 0);
+
+  $delta = 7200; // 2 hours.
+  if ($last_cleanup + $delta < time()) {
+    // Reset the third demo vocabulary.
+    $query = db_select('taxonomy_term_data', 't')
+              ->fields('t', array('tid'))
+              ->condition('t.vid', HSDEMO_TAXONOMY_EXAMPLE_3_VID)
+              ->condition('t.tid', unserialize(HSDEMO_TAXONOMY_EXAMPLE_3_ORIGINAL), 'NOT IN');
+    $result = $query->execute();
+    while ($row = $result->fetchObject()) {
+      taxonomy_term_delete($row->tid);
+      db_delete('url_alias')
+      ->condition('source', "taxonomy/term/$row->tid");
+    }
+
+    // Reset the config for the third demo vocabulary.
+    $config = array(
+      'save_lineage'    => 1,
+      'enforce_deepest' => 0,
+      'entity_count'    => 0,
+      'require_entity'  => 0,
+      'level_labels' => array(
+        'status' => 1,
+        'labels' => array(
+          0 => 'Country',
+          1 => 'City',
+        ),
+      ),
+      'dropbox' => array(
+        'status'    => 1,
+        'title'     => t('Places I\'ve visited'),
+        'limit'     => 2,
+        'reset_hs'  => 0,
+      ),
+      'editability' => array(
+        'status' => 1,
+        'item_types' => array(
+          0 => 'country',
+          1 => 'city',
+        ),
+        'allowed_levels' => array(
+          0 => 1,
+          1 => 1,
+        ),
+        'allow_new_levels' => 0,
+        'max_levels'       => 1,
+      ),
+    );
+    require_once(drupal_get_path('module', 'hierarchical_select') . '/includes/common.inc');
+    hierarchical_select_common_config_set('taxonomy-' . HSDEMO_TAXONOMY_EXAMPLE_3_VID, $config);
+
+    // Store the time of this cleanup.
+    variable_set('hsdemo_last_cleanup', time());
+  }
+}
+
+
+//----------------------------------------------------------------------------
+// Menu callbacks.
+
+function hsdemo_page_explanation() {
+  $output = '';
+  
+  $output = '<p>
+            This module defines the "hierarchical_select" form element, which is <strong>a greatly
+            enhanced way for letting the user select items in a hierarchy</strong>.
+            </p>';
+  
+  $output .= '<p>
+              Hierarchical Select has the ability to save the entire lineage of a selection
+              or only the "deepest" selection. You can configure it to force the user to
+              make a selection as deep as possible in the tree, or allow the user to select
+              an item anywhere in the tree. Levels can be labeled, you can configure limit
+              the number of items that can be selected, configure a title for the dropbox,
+              choose a site-wide animation delay, and so on. You can even create new items
+              and levels through Hierarchical Select!
+              </p>';
+
+  $output .= '<p>
+              This new form element makes using the Taxonomy, Book, Menu,
+              Content Taxonomy, Subscriptions Taxonomy and Deployment modules
+              so much easier and more pleasant to use.<br />
+              Second, but definitely not least, it makes selecting items in
+              big hierarchies actually <strong>scalable</strong>. It easily
+              scales up to thousands of items.<br />
+              Third, Hierarchical Select <strong>degrades completely</strong>:
+              all functionality works even when JavaScript is disabled.
+              <br />
+              However, to really achieve widespread usage across Drupal
+              contrib, it will be necessary to <strong>get Hierarchical Select
+              in core</strong>; because only then it will actually be used by
+              contrib developers.
+              </p>';
+
+  $output .= '<p>
+              <strong>Explore Hierarchical Select\'s features</strong> by
+              browsing through the tabs.
+              </p>';
+
+  $output .= '<p>Enjoy!</p>';
+
+  $output .= '<p style="font-size: 90%"><em>
+              For bug reports and feature or support requests, please use the
+              <a href="http://drupal.org/project/issues/hierarchical_select">issue queue</a>,
+              not my contact form. Thanks.
+              </em></p>';
+
+  return $output;
+}
+
+function hsdemo_page_cck() {
+  $modules = _hsdemo_page_shared();
+
+  if (!in_array('content', $modules)) {
+    $form['not'] = array(
+      '#markup' => t('Not installed.'),
+    );
+  }
+  else {
+    $form['example_1'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('content type > field > formatter'),
+      '#config' => array(
+        'module' => 'content',
+        'enforce_deepest' => 1,
+      ),
+      '#default_value' => -1,
+    );
+  }
+
+  return $form;
+}
+
+function hsdemo_page_flatlist() {
+  $modules = _hsdemo_page_shared();
+
+  if (!in_array('hs_flatlist', $modules)) {
+    $form['not'] = array(
+      '#markup' => t('Not installed.'),
+    );
+  }
+  else {
+    $form['example_1'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('I think Hierarchical Select is'),
+      '#description' => t('Select as many descriptions as you want!'),
+      '#default_value' => array(0),
+      '#config' => array(
+        'module' => 'hs_flatlist',
+        'params' => array(
+          'options' => array(
+            t('the thing that makes hierarchies fun'),
+            t('an awesome widget'),
+            t('a valuable addition to Drupal'),
+            t('a timesaver'),
+            t('a solution to my scalability frustrations'),
+            t('a small revolution on its own'),
+          ),
+        ),
+        'save_lineage'    => 0,
+        'enforce_deepest' => 0,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'level_labels' => array(
+          'status' => 0,
+        ),
+        'dropbox' => array(
+          'status' => 1,
+          'limit'  => 0,
+        ),
+        'editability' => array(
+          'status' => 0,
+        ),
+        'resizable' => 1,
+        'render_flat_select' => 0,
+      ),
+      '#weight' => 2,
+    );
+
+    $form['example_1_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t("In this example, the dropbox is enabled, and nothing
+                       else, because nothing else makes sense for this special
+                       implementation. The Flat List implementation allows you
+                       to pass in an array of options, like with a normal
+                       select, and get Hierarchical Select's superior user
+                       interface for selecting multiple items."),
+                    $form['example_1']['#config']
+                  ),
+      '#weight' => 1,
+    );
+  }
+
+  return $form;
+}
+
+function hsdemo_page_menu() {
+  $modules = _hsdemo_page_shared();
+
+  if (!in_array('hs_menu', $modules)) {
+    $form['not'] = array(
+      '#markup' => t('Not installed.'),
+    );
+  }
+  else {
+    $form['example_1'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('Parent menu item'),
+      '#description' => t('Select a parent menu item.'),
+      '#required' => TRUE,
+      '#default_value' => 'main-menu:0',
+      '#config' => array(
+        'module' => 'hs_menu',
+        'params' => array(
+          'exclude' => FALSE,
+        ),
+        'save_lineage'    => 0,
+        'enforce_deepest' => 0,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'level_labels' => array(
+          'status' => 0,
+        ),
+        'dropbox' => array(
+          'status' => 0,
+        ),
+        'editability' => array(
+          'status' => 0,
+        ),
+        'resizable' => 1,
+        'render_flat_select' => 0,
+      ),
+      '#size' => 8,
+      '#weight' => 2,
+    );
+
+    $form['example_1_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t('Thanks to a default larger size, and because
+                       Hierarchical Select can be resized by the user, finding
+                       a menu parent item becomes a lot less painful.'),
+                    $form['example_1']['#config']
+                  ),
+      '#weight' => 1,
+    );
+    // $form['example_1']['#access'] = FALSE;
+  }
+
+  return $form;
+}
+
+function hsdemo_page_taxonomy() {
+  $modules = _hsdemo_page_shared();
+
+  if (!in_array('hs_taxonomy', $modules)) {
+    $form['not'] = array(
+      '#markup' => t('Not installed.'),
+    );
+  }
+  else {
+    $form['example_1'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('My car'),
+      '#description' => t('Select your car, or the car that is the closest match to your car.'),
+      '#required' => TRUE,
+      '#default_value' => HSDEMO_TAXONOMY_EXAMPLE_1_DEFAULT,
+      '#config' => array(
+        'module' => 'hs_taxonomy',
+        'params' => array(
+          'vid'                        => HSDEMO_TAXONOMY_EXAMPLE_1_VID,
+          'exclude_tid'                => NULL,
+          'root_term'                  => NULL,
+          'entity_count_for_node_type' => NULL,
+        ),
+        'save_lineage'    => 0,
+        'enforce_deepest' => 1,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'level_labels' => array(
+          'status' => 0,
+        ),
+        'dropbox' => array(
+          'status' => 0,
+        ),
+        'editability' => array(
+          'status' => 0,
+        ),
+        'resizable' => 1,
+        'render_flat_select' => 0,
+      ),
+      '#weight' => 2,
+    );
+        
+    $form['example_1_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t('In this example, you are forced to select an item from
+                       the deepest level. And you can resize the widget. This
+                       is one of the most basic forms.<br />
+                       <em>Try to select the BMW 318i. Because you are being
+                       forced to select from the deepest level, it will feel
+                       even easier than expected.</em>'),
+                    $form['example_1']['#config']
+                  ),
+      '#weight' => 1,
+    );
+    
+    
+    $form['example_2'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('My car park'),
+      '#description' => t('At least when I win the lottery … twice.'),
+      '#required' => TRUE,
+      '#default_value' => unserialize(HSDEMO_TAXONOMY_EXAMPLE_2_DEFAULT),
+      '#config' => array(
+        'module' => 'hs_taxonomy',
+        'params' => array(
+          'vid'                        => HSDEMO_TAXONOMY_EXAMPLE_2_VID,
+          'exclude_tid'                => NULL,
+          'root_term'                  => NULL,
+          'entity_count_for_node_type' => NULL,
+        ),
+        'save_lineage'    => 0,
+        'enforce_deepest' => 1,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'level_labels' => array(
+          'status' => 0,
+        ),
+        'dropbox' => array(
+          'status'   => 1,
+          'title'    => t('Car park'),
+          'limit'    => 3,
+          'reset_hs' => 0,
+        ),
+        'editability' => array(
+          'status' => 0,
+        ),
+        'resizable' => 1,
+        'render_flat_select' => 0,
+      ),
+      '#weight' => 4,
+    );
+    
+    $form['example_2_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t('In this example, the dropbox is enabled, and a title
+                       and limit are set for it. Also, the selection will not
+                       be reset after you add an item to the dropbox.<br />
+                       <em>Try adding a term and you will get a warning,
+                       stating that you cannot select any additional items.</em>'),
+                    $form['example_2']['#config']
+                  ),
+      '#prefix' => '<div style="margin-top: 5em;">',
+      '#suffix' => '</div>',
+      '#weight' => 3,
+    );
+
+    $form['example_3'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t("Places I've visited"),
+      '#required' => TRUE,
+      '#default_value' => unserialize(HSDEMO_TAXONOMY_EXAMPLE_3_DEFAULT),
+      '#config' => array(
+        'module' => 'hs_taxonomy',
+        'params' => array(
+          'vid'                        => HSDEMO_TAXONOMY_EXAMPLE_3_VID,
+          'exclude_tid'                => NULL,
+          'root_term'                  => NULL,
+          'entity_count_for_node_type' => NULL,
+        ),
+        'save_lineage'    => 1,
+        'enforce_deepest' => 0,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'level_labels' => array(
+          'status' => 1,
+          'labels' => array(
+            0 => t('Country'),
+            1 => t('City'),
+          ),
+        ),
+        'dropbox' => array(
+          'status'   => 1,
+          'title'    => t('Places'),
+          'limit'    => 0,
+          'reset_hs' => 1,
+        ),
+        'editability' => array(
+          'status' => 1,
+          'item_types'       => array(
+            0 => t('country')),
+            1 => t('city'),
+          'allowed_levels'   => array(),
+          'allow_new_levels' => 1,
+          'max_levels'       => 2,
+        ),
+        'resizable' => 1,
+        'render_flat_select' => 0,
+      ),
+      '#weight' => 6,
+    );
+    
+    $form['example_3_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t('In this example, the dropbox still is enabled, but you
+                       are no longer forced to select an item from the deepest
+                       level. Level labels have been entered. And the entire
+                       lineage is being saved. Finally, the ability to create
+                       new items is enabled.<br />
+                       <em>Try adding Paris, you will see that France will be
+                       selected as well.</em><br />
+                       <em>Also try creating some new terms, Hierarchical
+                       Select makes this trivially easy and painless.</em>'),
+                    $form['example_3']['#config']
+                  ),
+      '#prefix' => '<div style="margin-top: 5em;">',
+      '#suffix' => '</div>',
+      '#weight' => 5,
+    );
+  }
+  
+  return $form;
+}
+
+function hsdemo_page_azstandards() {
+  $modules = _hsdemo_page_shared();
+
+  if (!in_array('az_standards', $modules)) {
+    $form['not'] = array(
+      '#markup' => t('Not installed.'),
+    );
+  }
+  else {
+    $form['example_1'] = array(
+      '#type' => 'hierarchical_select',
+      '#title' => t('Grades'),
+      '#default_value' => '0**mathematics**3**1**earlier_grade',
+      '#config' => array(
+        'module' => 'az_standards',
+        'params' => array(
+          'type' => '',
+        ),
+        'save_lineage'    => 0,
+        'enforce_deepest' => 0,
+        'entity_count'    => 0,
+        'require_entity'  => 0,
+        'resizable' => 0,
+        'level_labels' => array(
+          'status' => 1,
+          'labels' => array(
+            0 => t('Grade'),
+            1 => t('Subject'),
+            2 => t('Strand'),
+            3 => t('Concept'),
+            4 => t('Objective'),
+          ),
+        ),
+        'dropbox' => array(
+          'status' => 0,
+          'title' => t('Selected standards'),
+          'limit' => 0,
+          'reset_hs' => 0,
+        ),
+        'editability' => array(
+          'status' => 0,
+        ),
+        'params' => array(),
+        'render_flat_select' => 0,
+      ),
+      '#size' => 10,
+      '#weight' => 2,
+    );
+        
+    $form['example_1_text'] = array(
+      '#markup' => _hsdemo_example_text(
+                    t("Written by <a href=\"http://www.jeffbeeman.com/\">Jeff Beeman</a>
+                       of the <a href=\"http://www.asu.edu/\">Arizona State University</a>.<br />
+                       This implementation of the Hierarchical Select API
+                       dynamically fetches the <strong>grading system of the state of
+                       Arizona</strong>; this grading system is used by every college
+                       and university of Arizona.<br />
+                       The hierarchy is built according to a rather hard to
+                       grasp structure:<br />
+                       <strong>Grade › Subject › Strand › Concept › Objective</strong>
+                       <br />
+                       It uses the <a href=\"http://en.wikipedia.org/wiki/Lazy_loading\">lazy loading</a>
+                       principle. When the loading takes a couple of seconds,
+                       that means you have hit an unprocessed and therefor
+                       uncached part of the hierarchy. If you revisit the same
+                       part of the tree later, you'll notice it loads
+                       instantaneously.
+                       "),
+                    $form['example_1']['#config']
+                  ),
+      '#weight' => 1,
+    );    
+  }
+  
+  return $form;
+}
+
+function hsdemo_page_configui($form, $form_state) {
+  form_load_include($form_state, 'inc', 'hierarchical_select', 'includes/common');
+
+  $vid = HSDEMO_TAXONOMY_EXAMPLE_3_VID;
+
+  // Add the Hierarchical Select config form.
+  $module = 'hs_taxonomy';
+  $params = array(
+    'vid'                        => $vid,
+    'exclude_tid'                => NULL,
+    'root_term'                  => NULL,
+    'entity_count_for_node_type' => NULL,
+  );
+  $config_id = "taxonomy-$vid";
+  $vocabulary = taxonomy_vocabulary_load($vid);
+  $defaults = array(
+    // Enable the save_lineage setting by default if the multiple parents
+    // vocabulary option is enabled.
+    'save_lineage' => (int) ($vocabulary->hierarchy == 2),
+    'editability' => array(
+      'max_levels' => _hs_taxonomy_hierarchical_select_get_depth($vid),
+    ),
+  );
+  $strings = array(
+    'hierarchy'   => t('vocabulary'),
+    'hierarchies' => t('vocabularies'),
+    'item'        => t('term'),
+    'items'       => t('terms'),
+    'item_type'   => t('term type'),
+    'entity'      => t('node'),
+    'entities'    => t('nodes'),
+  );
+  $max_hierarchy_depth = _hs_taxonomy_hierarchical_select_get_depth($vid);
+  $preview_is_required = FALSE;
+  $form = hierarchical_select_common_config_form($module, $params, $config_id, $defaults, $strings, $max_hierarchy_depth, $preview_is_required);  
+
+  $form['info'] = array(
+    '#markup' => '<p style="margin-bottom: 5em">'.
+      t('This is the standardized UI for configuring
+        Hierarchical Select. It is used by every implementation where it makes
+        sense to have an UI (e.g. Taxonomy has it, but Menu does not).') .'</p>',
+    '#weight' => -10,
+  );
+  
+  // Add the the submit handler for the Hierarchical Select config form.
+  $parents = array();
+  $form['#hs_common_config_form_parents'] = $parents;
+  $form['#submit'][] = 'hierarchical_select_common_config_form_submit';
+
+  // Add the submit handler that will show a message.
+  $form['#submit'][] = 'hsdemo_page_configui_submit';
+
+  $form['submit'] = array(
+    '#type' => 'submit', 
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+function hsdemo_page_live() {
+  $output = '';
+
+  drupal_add_js("
+  (function($) {
+  $(document).ready(function() {
+    $('ul#demos div.demo')
+    .find('video').hide()
+    .end()
+    .find('a').toggle(
+      function() {
+        var \$video = $(this).parent().find('video');
+        \$video.show();
+        // Make sure the movie is nicely centered!
+        var top = $(this).offset().top;
+        var winHeight = $(window).height();
+        var movHeight = \$video.attr('height');
+        var offset = (winHeight > movHeight) ? (winHeight - movHeight) / 2 : 0;
+        $('html,body').animate({scrollTop: top - offset}, 800, 'linear');
+      },
+      function() {
+        $(this).parent().find('video').hide();
+      }
+    );
+  });
+  })(jQuery);
+  ",
+  'inline');
+  
+  $output = '<p>
+            This module is mature. It is being used on many Drupal-powered
+            web sites, including several high-profile ones!
+            </p>';
+  
+  $output .= '<ul id="demos">
+              <li><a href="http://www.standagainstpoverty.org/">Stand Against Poverty</a> (United Nations)<br />
+              <u>Note:</u> the current version of the site is no longer a
+              Drupal site, hence Hierarchical Select is also no longer used.
+              Please look at the demo video below to see what it looked like.
+              <br />
+              This web site, built by 
+              <a href="http://www.developmentseed.org/">Development Seed</a>,
+              allows people to connect to  stand up against poverty. The
+              central goal is to facilitate the organizing of events. And that
+              is where Hierarchical Select comes in.<br />
+              An event must obviously be organized at some location. Hierarchical
+              Select makes selecting that location fast and painless.<br />
+              <div class="demo" style="margin: 1.5em;">
+                <a href="#">Demo</a><br /><br />
+                <video src="' . url(drupal_get_path('module', 'hsdemo') . '/standagainstpoverty.org.mov') . '" width="640" height="480" preload="none" type=\'video/mp4; codecs="avc1.42E01E, mp4a.40.2"\' controls></video>
+              </div>
+              </li>
+              <li><a href="http://verenigingen.nieuwsblad.be/">Nieuwsblad Verenigingen</a> (Belgian newspaper)<br />
+              This web site has been built by <a href="http://one-agency.be/">ONE Agency</a>,
+              to enable schools, sports clubs, i.e. any non-profit organisation, 
+              to post news items.<br />
+              People that would like to read the news of the regional soccer
+              club, can then use Hierarchical Select to find it.
+              <div class="demo" style="margin: 1.5em;">
+                <a href="#">Demo</a><br /><br />
+                <video src="' . url(drupal_get_path('module', 'hsdemo') . '/verenigingen.nieuwsblad.be.mov') . '" width="640" height="480" preload="none" type=\'video/mp4; codecs="avc1.42E01E, mp4a.40.2"\' controls></video>
+              </div>
+              </li>
+              <li>… and in the back-ends of many more web sites, including:
+                <ul>
+                  <li><a href="http://www.motherjones.com/">Mother Jones</a> (most widely read progressive magazine in the U.S.)<br />
+                    Uses Hierarchical Select to classify their articles. Built by <a href="http://www.echoditto.com/">EchoDitto</a>.
+                  </li>
+                  <li><a href="http://www.vanmag.com/">Vancouver Magazine</a> (covers events, people and issues of Vancouver)<br />
+                    Also uses Hierarchical Select to classify their articles. Built by <a href="http://grey.net">Grey Vancouver</a>.
+                  </li>
+                  <li><a href="http://www.asu.edu/">Arizona State University</a><br />
+                    Needed to allow teachers to select grades from the complex,
+                    state-defined grading system. Hierarchical Select was the
+                    only widget scalable enough to support it.
+                  </li>
+                  <li><a href="http://geeksandgod.com/">GeeksAndGod.com</a> (podcast community web site)<br />
+                    Geeks &amp; God use it when someone adds a tutorial or review.
+                  </li>
+                  <li><a href="http://rtbf.be/info/">RTBF</a> (Belgian television channel)<br />
+                    Uses Hierarchical Select to categorize all of its news items.
+                  </li>
+                </ul>
+              </li>
+              </ul>';
+
+  $output .= '<p style="font-size: 90%"><em>
+              Feel free to <a href="/contact">contact me</a> if you would like
+              to be added to this list.
+              </em></p>';
+
+  return $output;
+}
+
+
+//----------------------------------------------------------------------------
+// Forms API callbacks.
+
+function hsdemo_page_configui_submit() {
+  drupal_set_message(t('You changed the config. Look at the preview on the right to find out the effects!'));
+}
+
+
+//----------------------------------------------------------------------------
+// Private functions.
+
+function _hsdemo_page_shared() {
+  // require_once(drupal_get_path('module', 'geshifilter') .'/geshifilter.pages.inc');
+  drupal_add_js("
+  (function($) {
+  $(document).ready(function() {
+    $('blockquote')
+    .find('div.config').hide().end()
+    .find('a').toggle(
+      function() {
+        $(this).parent().find('div.config').show();
+      },
+      function() {
+        $(this).parent().find('div.config').hide();
+      }
+    );
+  });
+  })(jQuery);
+  ",
+  'inline');
+
+  $modules = module_implements('hierarchical_select_params');
+  
+  return $modules;
+}
+
+function _hsdemo_example_text($text, $config) {
+  $output = '';
+
+  $output .= '<blockquote>';
+  $output .= $text;
+  $output .= '<br />';
+  $output .= l(t('Show config'), '#');
+  $output .= '<div class="config" style="width:85%">';
+  // $output .= geshifilter_process(print_r($config, TRUE), 'code', TRUE);
+  $output .= '<pre style="background:#DDD">' . print_r($config, TRUE) . '</pre>';
+  $output .= '</div>';
+  $output .= '</blockquote>';
+
+  return $output;
+}

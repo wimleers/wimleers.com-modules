@@ -1,0 +1,4 @@
+name = Hierarchical Select Demos
+dependencies[] = hierarchical_select
+package = wimleers.com
+core = 7.x

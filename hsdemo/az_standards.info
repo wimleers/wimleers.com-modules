@@ -1,0 +1,5 @@
+name = Arizona Standards
+description = Allows tools for tying content to Arizona state educational standards
+package = wimleers.com
+version=1.0-for-D7-HS-stuff-only
+core = 7.x
