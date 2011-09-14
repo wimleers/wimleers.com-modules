@@ -24,8 +24,8 @@ function hsdemo_menu() {
     'access arguments'  => array('access content'),
     'type'          => MENU_NORMAL_ITEM,
   );
-  $items['demo/hierarchical-select/explanation'] = array(
-    'title'  => t('Explanation'),
+  $items['demo/hierarchical-select/intro'] = array(
+    'title'  => t('Intro'),
     'weight' => -10,
     'access arguments'  => array('access content'),
     'type'   => MENU_DEFAULT_LOCAL_TASK,
@@ -55,7 +55,7 @@ function hsdemo_menu() {
     'weight'         => 5,
   );
   $items['demo/hierarchical-select/az-standards'] = array(
-    'title'          => t('Arizona Standards'),
+    'title'          => t('AZ Standards'),
     'page callback'  => 'drupal_get_form',
     'page arguments' => array('hsdemo_page_azstandards'),
     'type'           => MENU_LOCAL_TASK,
@@ -71,7 +71,7 @@ function hsdemo_menu() {
     'weight'         => 9,
   );
   $items['demo/hierarchical-select/live'] = array(
-    'title'            => t('Live sites'),
+    'title'            => t('Live'),
     'page callback'    => 'hsdemo_page_live',
     'type'             => MENU_LOCAL_TASK,
     'access arguments' => array('access content'),
