@@ -148,11 +148,13 @@ function hsdemo_cron() {
 
 function hsdemo_page_explanation() {
   $output = '';
-  
-  $output = '<p>
-            This module defines the "hierarchical_select" form element, which is <strong>a greatly
-            enhanced way for letting the user select items in a hierarchy</strong>.
-            </p>';
+
+  $output .= '<div class="body">';
+
+  $output .= '<p>
+              This module defines the "hierarchical_select" form element, which is <strong>a greatly
+              enhanced way for letting the user select items in a hierarchy</strong>.
+              </p>';
   
   $output .= '<p>
               Hierarchical Select has the ability to save the entire lineage of a selection
@@ -196,6 +198,8 @@ function hsdemo_page_explanation() {
   $output .= '<p style="font-size: 90%">P.S.: The module that powers this demo
               is available on <a href="https://github.com/wimleers/wimleers.com-modules/tree/master/hsdemo">Github</a>.
               </p>';
+
+  $output .= '</div>';
 
   return $output;
 }
@@ -679,11 +683,13 @@ function hsdemo_page_live() {
   })(jQuery);
   ",
   'inline');
-  
-  $output = '<p>
-            This module is mature. It is being used on many Drupal-powered
-            web sites, including several high-profile ones!
-            </p>';
+
+  $output .= '<div class="body">';
+
+  $output .= '<p>
+              This module is mature. It is being used on many Drupal-powered
+              web sites, including several high-profile ones!
+              </p>';
   
   $output .= '<ul id="demos">
               <li><a href="http://www.standagainstpoverty.org/">Stand Against Poverty</a> (United Nations)<br />
@@ -741,6 +747,8 @@ function hsdemo_page_live() {
               Feel free to <a href="/contact">contact me</a> if you would like
               to be added to this list.
               </em></p>';
+
+  $output .= '</div>';
 
   return $output;
 }
